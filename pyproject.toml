@@ -50,6 +50,26 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
+[tool.ruff.lint.isort]
+known-third-party = [
+    "airflow",
+    "pyspark",
+    "prophet",
+    "sklearn",
+    "boto3",
+    "sqlalchemy",
+    "pydantic",
+    "pydantic_settings",
+    "prometheus_client",
+    "tenacity",
+    "schedule",
+    "requests",
+    "joblib",
+    "numpy",
+    "pandas",
+    "pyarrow",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts   = "--cov=src --cov-report=term-missing"
