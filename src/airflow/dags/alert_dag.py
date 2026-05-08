@@ -1,18 +1,18 @@
-"""
-DAG 5: Alert dispatcher — rule-based + ML alerts → ntfy.sh + Outlook email.
-Runs at :45 past each hour, after ingest (00), features (00), predictions (30).
-"""
+"""DAG 5: Alert dispatcher — rule-based + ML alerts → ntfy.sh + Outlook email."""
 from __future__ import annotations
+
 from datetime import datetime, timedelta
-from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
+
 from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 
+from airflow import DAG
+
 DEFAULT_ARGS = {
-    "owner":            "data-engineering",
-    "retries":          1,
-    "retry_delay":      timedelta(minutes=2),
+    "owner": "data-engineering",
+    "retries": 1,
+    "retry_delay": timedelta(minutes=2),
     "email_on_failure": True,
 }
 
@@ -26,24 +26,27 @@ with DAG(
     default_args=DEFAULT_ARGS,
     tags=["alerts"],
 ) as dag:
-
     start = EmptyOperator(task_id="start")
-    end   = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ALL_DONE)
+    end = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ALL_DONE)
 
-    # ── Task 1: Run rule-based checks ─────────────────────────────────────────
     def _rule_based_check(**context):
-        from src.ingestion.fivetran_client import FivetranClient
         from src.alerts.dispatcher import check_connector_health, check_row_anomalies
-        client     = FivetranClient()
+        from src.ingestion.fivetran_client import FivetranClient
+
+        client = FivetranClient()
         connectors = client.list_connectors()
-        health     = []
+        health = []
         row_alerts = []
         for conn in connectors:
             health.extend(check_connector_health(conn))
             history = client.get_sync_history(conn["id"], limit=5)
             row_alerts.extend(check_row_anomalies(conn, history))
-        context["ti"].xcom_push(key="health_issues",  value=[h.__dict__ for h in health])
-        context["ti"].xcom_push(key="row_anomalies",  value=[r.__dict__ for r in row_alerts])
+        context["ti"].xcom_push(
+            key="health_issues", value=[h.__dict__ for h in health]
+        )
+        context["ti"].xcom_push(
+            key="row_anomalies", value=[r.__dict__ for r in row_alerts]
+        )
         return {"health": len(health), "row_anomalies": len(row_alerts)}
 
     rule_check = PythonOperator(
@@ -51,39 +54,34 @@ with DAG(
         python_callable=_rule_based_check,
     )
 
-    # ── Task 2: Merge rule + ML alerts ────────────────────────────────────────
     def _merge_alerts(**context):
-        ti           = context["ti"]
-        health       = ti.xcom_pull(task_ids="rule_based_checks", key="health_issues") or []
-        row_alerts   = ti.xcom_pull(task_ids="rule_based_checks", key="row_anomalies") or []
-        # ML anomalies come from ml_prediction DAG via cross-DAG XCom or DB
+        ti = context["ti"]
+        health = ti.xcom_pull(task_ids="rule_based_checks", key="health_issues") or []
+        row_alerts = (
+            ti.xcom_pull(task_ids="rule_based_checks", key="row_anomalies") or []
+        )
         from src.alerts.dispatcher import load_ml_alerts
+
         ml_alerts = load_ml_alerts()
         all_alerts = {
-            "health":    health,
-            "row":       row_alerts,
-            "ml":        ml_alerts,
-            "total":     len(health) + len(row_alerts) + len(ml_alerts),
+            "health": health,
+            "row": row_alerts,
+            "ml": ml_alerts,
+            "total": len(health) + len(row_alerts) + len(ml_alerts),
         }
         ti.xcom_push(key="all_alerts", value=all_alerts)
         return all_alerts
 
-    merge = PythonOperator(
-        task_id="merge_alerts",
-        python_callable=_merge_alerts,
-    )
+    merge = PythonOperator(task_id="merge_alerts", python_callable=_merge_alerts)
 
-    # ── Task 3: Dispatch alerts ───────────────────────────────────────────────
     def _dispatch(**context):
         from src.alerts.dispatcher import dispatch_all
-        ti         = context["ti"]
+
+        ti = context["ti"]
         all_alerts = ti.xcom_pull(task_ids="merge_alerts", key="all_alerts") or {}
-        sent       = dispatch_all(all_alerts)
+        sent = dispatch_all(all_alerts)
         return {"alerts_sent": sent}
 
-    dispatch = PythonOperator(
-        task_id="dispatch_alerts",
-        python_callable=_dispatch,
-    )
+    dispatch = PythonOperator(task_id="dispatch_alerts", python_callable=_dispatch)
 
     start >> rule_check >> merge >> dispatch >> end

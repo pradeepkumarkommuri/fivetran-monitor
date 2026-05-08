@@ -1,15 +1,22 @@
 """DAG 2: Trigger PySpark feature engineering on Kubernetes."""
 from __future__ import annotations
+
 from datetime import datetime, timedelta
-from airflow import DAG
+
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
-from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import SparkKubernetesSensor
+from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import (
+    SparkKubernetesOperator,
+)
+from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import (
+    SparkKubernetesSensor,
+)
+
+from airflow import DAG
 
 DEFAULT_ARGS = {
-    "owner":            "data-engineering",
-    "retries":          1,
-    "retry_delay":      timedelta(minutes=10),
+    "owner": "data-engineering",
+    "retries": 1,
+    "retry_delay": timedelta(minutes=10),
     "email_on_failure": True,
 }
 
@@ -61,9 +68,8 @@ with DAG(
     default_args=DEFAULT_ARGS,
     tags=["spark", "features"],
 ) as dag:
-
     start = EmptyOperator(task_id="start")
-    end   = EmptyOperator(task_id="end")
+    end = EmptyOperator(task_id="end")
 
     submit_spark = SparkKubernetesOperator(
         task_id="submit_feature_spark_job",
@@ -76,11 +82,14 @@ with DAG(
     wait_for_spark = SparkKubernetesSensor(
         task_id="wait_for_spark_completion",
         namespace="spark",
-        application_name="{{ task_instance.xcom_pull(task_ids='submit_feature_spark_job')['metadata']['name'] }}",
+        application_name=(
+            "{{ task_instance.xcom_pull("
+            "task_ids='submit_feature_spark_job')['metadata']['name'] }}"
+        ),
         kubernetes_conn_id="kubernetes_default",
         attach_log=True,
         poke_interval=30,
-        timeout=1800,   # 30 min max
+        timeout=1800,
     )
 
     start >> submit_spark >> wait_for_spark >> end

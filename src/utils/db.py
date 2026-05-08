@@ -1,14 +1,19 @@
 """PostgreSQL connection pool via SQLAlchemy."""
 from __future__ import annotations
+
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Generator
+
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
 from src.utils.config import get_settings
+
 
 class Base(DeclarativeBase):
     pass
+
 
 @lru_cache(maxsize=1)
 def get_engine():
@@ -18,12 +23,14 @@ def get_engine():
         pool_size=cfg.pool_size,
         max_overflow=cfg.max_overflow,
         echo=cfg.echo,
-        pool_pre_ping=True,          # validate connections before use
+        pool_pre_ping=True,
     )
+
 
 @lru_cache(maxsize=1)
 def get_session_factory():
     return sessionmaker(bind=get_engine(), expire_on_commit=False)
+
 
 @contextmanager
 def get_db_session() -> Generator[Session, None, None]:
@@ -38,6 +45,7 @@ def get_db_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
 
 def health_check() -> bool:
     """Return True if DB is reachable."""

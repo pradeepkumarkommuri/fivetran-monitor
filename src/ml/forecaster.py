@@ -3,16 +3,22 @@ Prophet time-series forecaster.
 One model per connector_id. Predicts expected row counts for next sync window.
 """
 from __future__ import annotations
-import io, logging
+
+import io
+import logging
+
 import joblib
 import pandas as pd
-from src.utils.config import get_settings
+
 from src.utils import storage
+from src.utils.config import get_settings
 
 log = logging.getLogger(__name__)
 
+
 def _model_key(connector_id: str) -> str:
     return f"{connector_id}/prophet.joblib"
+
 
 def train(
     connector_id: str,
@@ -20,18 +26,15 @@ def train(
     date_col: str = "sync_time",
     value_col: str = "rows_updated",
 ) -> object | None:
-    """
-    Train a Prophet model for a connector's total row counts over time.
-    Returns None if insufficient data.
-    """
+    """Train a Prophet model. Returns None if insufficient data."""
     try:
-        from prophet import Prophet  # lazy import — Prophet is heavy
+        from prophet import Prophet  # noqa: PLC0415
     except ImportError:
         log.error("prophet package not installed. Run: pip install prophet")
         return None
 
     cfg = get_settings().ml
-    ts  = (
+    ts = (
         df[[date_col, value_col]]
         .rename(columns={date_col: "ds", value_col: "y"})
         .dropna()
@@ -60,6 +63,7 @@ def train(
     )
     return model
 
+
 def load(connector_id: str) -> object | None:
     try:
         data = storage.get_bytes(
@@ -71,26 +75,22 @@ def load(connector_id: str) -> object | None:
         log.debug("No Prophet model for %s: %s", connector_id, exc)
         return None
 
-def predict_next(
-    model,
-    horizon_hours: int | None = None,
-) -> dict:
-    """
-    Forecast the next N hours.
-    Returns {"forecast": float, "lower": float, "upper": float, "periods": int}
-    """
-    cfg     = get_settings().ml
+
+def predict_next(model: object, horizon_hours: int | None = None) -> dict:
+    """Forecast the next N hours."""
+    cfg = get_settings().ml
     periods = horizon_hours or cfg.forecast_horizon_hours
-    future  = model.make_future_dataframe(periods=periods, freq="H")
-    forecast = model.predict(future).tail(periods)
-    last     = forecast.iloc[-1]
+    future = model.make_future_dataframe(periods=periods, freq="H")  # type: ignore[attr-defined]
+    forecast = model.predict(future).tail(periods)  # type: ignore[attr-defined]
+    last = forecast.iloc[-1]
     return {
-        "forecast":    float(last["yhat"]),
-        "lower":       float(last["yhat_lower"]),
-        "upper":       float(last["yhat_upper"]),
-        "periods":     periods,
-        "horizon_h":   periods,
+        "forecast": float(last["yhat"]),
+        "lower": float(last["yhat_lower"]),
+        "upper": float(last["yhat_upper"]),
+        "periods": periods,
+        "horizon_h": periods,
     }
+
 
 def is_outside_bounds(actual: float, forecast_result: dict) -> bool:
     """Return True if actual rows fall outside the forecast confidence interval."""
