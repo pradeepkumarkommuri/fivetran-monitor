@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fivetran-monitor-config
+  namespace: fivetran-monitor
+data:
+  APP_ENV:                     "production"
+  FIVETRAN_BASE_URL:           "https://api.fivetran.com/v1"
+  NTFY_SERVER:                 "https://ntfy.sh"
+  NTFY_TOPIC:                  "fivetran-alerts"
+  SMTP_HOST:                   "smtp.office365.com"
+  SMTP_PORT:                   "587"
+  EMAIL_USE_TLS:               "true"
+  EMAIL_ENABLED:                "true"
+  MINIO_ENDPOINT:              "http://minio:9000"
+  MINIO_BUCKET:                "fivetran-monitor"
+  SCHEDULE_INTERVAL_MINUTES:   "60"
+  SCHEDULE_RUN_ON_START:       "true"
+  DROP_THRESHOLD_PCT:          "20"
+  SPIKE_THRESHOLD_PCT:         "200"
+  ZERO_ROWS_ALERT:             "true"
+  DELAY_MULTIPLIER:            "2.0"
+  ML_ANOMALY_CONTAMINATION:    "0.05"
+  ML_TRAINING_LOOKBACK_DAYS:   "90"
+  ML_FORECAST_HORIZON_HOURS:   "24"
+  SPARK_MASTER:                "k8s://https://kubernetes.default.svc:443"
+  SPARK_EXECUTOR_INSTANCES:    "2"
+  SPARK_EXECUTOR_MEMORY:       "2g"

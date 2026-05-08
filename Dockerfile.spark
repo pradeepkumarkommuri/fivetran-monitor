@@ -1,0 +1,8 @@
+FROM apache/spark:3.5.0-python3
+USER root
+WORKDIR /app
+RUN pip install --no-cache-dir boto3 pydantic pydantic-settings python-dotenv
+COPY src/ ./src/
+COPY pyproject.toml .
+ENV PYTHONPATH=/app PYTHONUNBUFFERED=1
+USER spark

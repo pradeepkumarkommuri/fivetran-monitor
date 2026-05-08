@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fivetran-monitor
+  namespace: fivetran-monitor
+  labels:
+    app: fivetran-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fivetran-monitor
+  template:
+    metadata:
+      labels:
+        app: fivetran-monitor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9090"
+        prometheus.io/path:   "/metrics"
+    spec:
+      serviceAccountName: fivetran-monitor-sa
+      containers:
+        - name: monitor
+          image: your-registry/fivetran-monitor:latest
+          imagePullPolicy: Always
+          command: ["python", "-m", "src.main", "--schedule"]
+          ports:
+            - containerPort: 9090
+              name: metrics
+          envFrom:
+            - configMapRef:
+                name: fivetran-monitor-config
+            - secretRef:
+                name: fivetran-monitor-secrets
+          resources:
+            requests:
+              cpu:    "200m"
+              memory: "256Mi"
+            limits:
+              cpu:    "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import schedule; print('ok')"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "from src.utils.db import health_check; exit(0 if health_check() else 1)"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
